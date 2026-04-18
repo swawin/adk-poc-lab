@@ -2,6 +2,15 @@
 
 A minimal React + Vite frontend that calls the deployed fun-facts backend and displays 5 facts for a topic.
 
+## Route structure
+
+This frontend now uses React Router with simple, explicit routes:
+
+- `/` → small home/landing page
+- `/fun-facts` → Fun Facts Explorer UI
+
+This keeps the app ready for future agent pages, each on their own route.
+
 ## What this app does
 
 - Lets you enter a topic (default is `space`)
@@ -16,7 +25,7 @@ The backend base URL lives in:
 
 - `src/config.js` → `BACKEND_BASE_URL`
 
-The app builds a request to `/fun-fact` with a `topic` query parameter in `src/App.jsx`.
+The Fun Facts page builds a request to `/fun-fact` with a `topic` query parameter.
 
 If your backend URL changes later, update `BACKEND_BASE_URL`.
 
@@ -40,7 +49,7 @@ npm run preview
 
 ## Deploy to Vercel
 
-This is a standard Vite React app, so no custom `vercel.json` is needed.
+This app includes a `vercel.json` rewrite so direct loads on client-side routes (like `/fun-facts`) resolve to `index.html`.
 
 ### Option 1: Vercel dashboard
 
