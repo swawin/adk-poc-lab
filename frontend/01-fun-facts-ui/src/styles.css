@@ -15,6 +15,10 @@ body {
   min-height: 100vh;
 }
 
+a {
+  color: #1d4ed8;
+}
+
 .app-container {
   width: min(720px, 92vw);
   margin: 40px auto;
@@ -22,6 +26,10 @@ body {
   background: #ffffff;
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.page-nav {
+  margin-bottom: 8px;
 }
 
 h1 {
@@ -38,6 +46,15 @@ h1 {
   display: grid;
   gap: 10px;
   margin: 20px 0;
+}
+
+.home-links h2 {
+  margin-bottom: 8px;
+}
+
+.home-links ul {
+  margin-top: 0;
+  padding-left: 20px;
 }
 
 label {
