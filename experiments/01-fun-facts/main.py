@@ -4,6 +4,7 @@ import json
 import uuid
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -14,6 +15,22 @@ APP_NAME = "fun_facts"
 USER_ID = "api-user"
 
 app = FastAPI(title="fun-facts")
+
+# Local frontend dev origins plus Vercel preview/production subdomains.
+# If you later lock this down further, replace with your exact frontend URL(s).
+allowed_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def _strip_code_fences(raw_response: str) -> str:
