@@ -1,6 +1,6 @@
 # 01-fun-facts
 
-A minimal learning adaptation of Google's ADK `fun-facts` sample.
+A minimal learning adaptation of Google's ADK `fun-facts` sample, now with a tiny FastAPI web wrapper.
 
 ## What this sample does
 
@@ -10,16 +10,17 @@ It follows the same core ADK pattern as the reference sample:
 - load environment variables
 - define a root `Agent`
 - attach the built-in `google_search` tool
-- optionally expose an `App` object
+- expose a very small HTTP API for browser/phone testing
 
-## Files created
+## Files
 
 - `fun_facts/agent.py` – root agent + ADK `App` definition
 - `fun_facts/__init__.py` – package exports for easy imports
 - `run_fun_facts.py` – simple script entrypoint to run the agent directly from Python
+- `main.py` – FastAPI app entrypoint for local web/API usage
 - `requirements.txt` – minimal dependencies for this experiment
 
-## High-level run steps
+## Run the web app
 
 1. Create and activate a virtual environment.
 2. Install dependencies:
@@ -29,11 +30,24 @@ It follows the same core ADK pattern as the reference sample:
    ```
 
 3. Set credentials/environment values expected by ADK/Gemini (for example in a local `.env`).
-4. Run the script with a topic:
+4. Start the API server:
 
    ```bash
-   python run_fun_facts.py "volcanoes"
+   uvicorn main:app --host 0.0.0.0 --port 8000
    ```
+
+5. Test endpoints:
+
+   - Health check: `http://localhost:8000/health`
+   - Fun fact: `http://localhost:8000/fun-fact?topic=space`
+
+## Optional script mode
+
+You can still run the original script entrypoint:
+
+```bash
+python run_fun_facts.py "volcanoes"
+```
 
 If no topic is provided, the script defaults to `space`.
 
