@@ -56,6 +56,8 @@ API response shape for `GET /fun-fact?topic=space` (topic can be any value):
 }
 ```
 
+The endpoint now validates structured JSON from the model, strips markdown code fences when needed, and only returns a response when exactly 5 facts are present.
+
 
 ## Optional script mode
 

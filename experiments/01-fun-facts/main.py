@@ -3,7 +3,7 @@
 import json
 import uuid
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -16,18 +16,35 @@ USER_ID = "api-user"
 app = FastAPI(title="fun-facts")
 
 
-def _normalize_facts(raw_response: str) -> list[str]:
-    """Return up to five clean facts, preferring JSON but allowing simple fallback parsing."""
-    try:
-        payload = json.loads(raw_response)
-        if isinstance(payload, dict) and isinstance(payload.get("facts"), list):
-            parsed = [str(item).strip() for item in payload["facts"] if str(item).strip()]
-            return parsed[:5]
-    except json.JSONDecodeError:
-        pass
+def _strip_code_fences(raw_response: str) -> str:
+    """Remove common markdown code fences before JSON parsing."""
+    cleaned = raw_response.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+    return cleaned
 
-    lines = [line.strip(" -•*\t") for line in raw_response.splitlines() if line.strip()]
-    return lines[:5]
+
+def _parse_facts_json(raw_response: str) -> list[str]:
+    """Parse and validate fun-facts JSON, requiring exactly five facts."""
+    # Reliability fix: strictly parse JSON (with fence stripping) and validate shape/count.
+    cleaned = _strip_code_fences(raw_response)
+    payload = json.loads(cleaned)
+
+    if not isinstance(payload, dict):
+        raise ValueError("Model response is not a JSON object.")
+    facts = payload.get("facts")
+    if not isinstance(facts, list):
+        raise ValueError("Model response JSON must include a facts list.")
+
+    parsed_facts = [fact.strip() for fact in facts if isinstance(fact, str) and fact.strip()]
+    if len(parsed_facts) != 5:
+        raise ValueError(f"Expected exactly 5 facts but received {len(parsed_facts)}.")
+    return parsed_facts
 
 
 async def generate_fun_facts(topic: str) -> list[str]:
@@ -61,15 +78,9 @@ async def generate_fun_facts(topic: str) -> list[str]:
     ):
         if event.is_final_response() and event.content and event.content.parts:
             response_text = "".join(part.text for part in event.content.parts if part.text)
-            facts = _normalize_facts(response_text)
-            if len(facts) >= 5:
-                return facts[:5]
-            break
+            return _parse_facts_json(response_text)
 
-    return [
-        f"I couldn't generate fact {index} for {topic} right now."
-        for index in range(1, 6)
-    ]
+    raise ValueError("No final response received from model.")
 
 
 @app.get("/health")
@@ -80,5 +91,11 @@ async def health() -> dict[str, bool]:
 @app.get("/fun-fact")
 async def fun_fact(topic: str = Query(default="space", min_length=1)) -> dict[str, object]:
     cleaned_topic = topic.strip()
-    facts = await generate_fun_facts(cleaned_topic)
+    try:
+        facts = await generate_fun_facts(cleaned_topic)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to generate reliable structured facts: {exc}",
+        ) from exc
     return {"topic": cleaned_topic, "facts": facts}
