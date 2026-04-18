@@ -41,7 +41,8 @@ async def generate_fun_fact(topic: str) -> str:
         new_message=content,
     ):
         if event.is_final_response() and event.content and event.content.parts:
-            return event.content.parts[0].text
+            # The previous code returned only parts[0], which can be just the first chunk/item.
+            return "".join(part.text for part in event.content.parts if part.text)
 
     return "I couldn't generate a fun fact right now."
 
