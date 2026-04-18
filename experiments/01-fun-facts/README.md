@@ -41,6 +41,12 @@ It follows the same core ADK pattern as the reference sample:
    - Health check: `http://localhost:8000/health`
    - Fun fact: `http://localhost:8000/fun-fact?topic=space`
 
+Cross-origin frontend calls are supported via FastAPI CORS middleware for:
+
+- `http://localhost:5173`
+- `http://localhost:3000`
+- `https://*.vercel.app` (via origin regex)
+
 API response shape for `GET /fun-fact?topic=space` (topic can be any value):
 
 ```json
