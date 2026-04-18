@@ -1,5 +1,6 @@
 """Minimal FastAPI wrapper for the ADK fun-facts experiment."""
 
+import json
 import uuid
 
 from fastapi import FastAPI, Query
@@ -15,8 +16,22 @@ USER_ID = "api-user"
 app = FastAPI(title="fun-facts")
 
 
-async def generate_fun_fact(topic: str) -> str:
-    """Generate a fun fact response for a topic using the ADK agent."""
+def _normalize_facts(raw_response: str) -> list[str]:
+    """Return up to five clean facts, preferring JSON but allowing simple fallback parsing."""
+    try:
+        payload = json.loads(raw_response)
+        if isinstance(payload, dict) and isinstance(payload.get("facts"), list):
+            parsed = [str(item).strip() for item in payload["facts"] if str(item).strip()]
+            return parsed[:5]
+    except json.JSONDecodeError:
+        pass
+
+    lines = [line.strip(" -•*\t") for line in raw_response.splitlines() if line.strip()]
+    return lines[:5]
+
+
+async def generate_fun_facts(topic: str) -> list[str]:
+    """Generate exactly five topic-specific fun facts using the ADK agent."""
     session_service = InMemorySessionService()
     session_id = str(uuid.uuid4())
 
@@ -32,7 +47,11 @@ async def generate_fun_fact(topic: str) -> str:
         session_service=session_service,
     )
 
-    prompt = f"Share 5 surprising fun facts about {topic}."
+    # Keep the response machine-friendly by asking for compact JSON with five distinct facts.
+    prompt = (
+        f"Return exactly 5 distinct fun facts about {topic}. "
+        'Respond with JSON only in this shape: {"facts": ["fact 1", "fact 2", "fact 3", "fact 4", "fact 5"]}.'
+    )
     content = types.Content(role="user", parts=[types.Part(text=prompt)])
 
     async for event in runner.run_async(
@@ -41,10 +60,16 @@ async def generate_fun_fact(topic: str) -> str:
         new_message=content,
     ):
         if event.is_final_response() and event.content and event.content.parts:
-            # The previous code returned only parts[0], which can be just the first chunk/item.
-            return "".join(part.text for part in event.content.parts if part.text)
+            response_text = "".join(part.text for part in event.content.parts if part.text)
+            facts = _normalize_facts(response_text)
+            if len(facts) >= 5:
+                return facts[:5]
+            break
 
-    return "I couldn't generate a fun fact right now."
+    return [
+        f"I couldn't generate fact {index} for {topic} right now."
+        for index in range(1, 6)
+    ]
 
 
 @app.get("/health")
@@ -53,6 +78,7 @@ async def health() -> dict[str, bool]:
 
 
 @app.get("/fun-fact")
-async def fun_fact(topic: str = Query(default="space", min_length=1)) -> dict[str, str]:
-    fact = await generate_fun_fact(topic.strip())
-    return {"topic": topic, "fun_fact": fact}
+async def fun_fact(topic: str = Query(default="space", min_length=1)) -> dict[str, object]:
+    cleaned_topic = topic.strip()
+    facts = await generate_fun_facts(cleaned_topic)
+    return {"topic": cleaned_topic, "facts": facts}

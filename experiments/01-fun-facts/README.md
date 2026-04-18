@@ -41,6 +41,22 @@ It follows the same core ADK pattern as the reference sample:
    - Health check: `http://localhost:8000/health`
    - Fun fact: `http://localhost:8000/fun-fact?topic=space`
 
+API response shape for `GET /fun-fact?topic=space` (topic can be any value):
+
+```json
+{
+  "topic": "space",
+  "facts": [
+    "fact 1",
+    "fact 2",
+    "fact 3",
+    "fact 4",
+    "fact 5"
+  ]
+}
+```
+
+
 ## Optional script mode
 
 You can still run the original script entrypoint:
