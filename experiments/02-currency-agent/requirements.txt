@@ -2,3 +2,5 @@ google-adk
 fastmcp
 httpx
 python-dotenv
+fastapi
+uvicorn
