@@ -1,6 +1,9 @@
 """Minimal FastAPI wrapper for the currency ADK agent."""
 
+import logging
+import traceback
 import uuid
+from typing import Any
 
 from fastapi import FastAPI, Query
 from google.adk.runners import Runner
@@ -11,12 +14,32 @@ from currency_agent import root_agent
 
 APP_NAME = "currency_agent"
 USER_ID = "web-user"
+MAX_DEBUG_EVENTS = 8
 
 app = FastAPI(title="Currency Agent API")
+logger = logging.getLogger(__name__)
 
 
-async def ask_currency_agent(prompt: str) -> str:
-    """Send one prompt to the ADK agent and return final text."""
+def _event_to_debug(event: Any) -> dict[str, Any]:
+    """Build a compact event snapshot for troubleshooting."""
+    parts = []
+    content = getattr(event, "content", None)
+    for part in getattr(content, "parts", []) or []:
+        text = getattr(part, "text", None)
+        if text:
+            parts.append(text[:200])
+
+    return {
+        "type": type(event).__name__,
+        "is_final_response": bool(getattr(event, "is_final_response", lambda: False)()),
+        "author": getattr(event, "author", None),
+        "has_content": bool(content),
+        "text_parts": parts,
+    }
+
+
+async def ask_currency_agent(prompt: str) -> dict[str, Any]:
+    """Send one prompt to the ADK agent and return structured result + debug info."""
     session_service = InMemorySessionService()
     session_id = str(uuid.uuid4())
 
@@ -33,16 +56,50 @@ async def ask_currency_agent(prompt: str) -> str:
     )
 
     content = types.Content(role="user", parts=[types.Part(text=prompt)])
+    recent_events: list[dict[str, Any]] = []
 
-    async for event in runner.run_async(
-        user_id=USER_ID,
-        session_id=session_id,
-        new_message=content,
-    ):
-        if event.is_final_response() and event.content and event.content.parts:
-            return "".join(part.text for part in event.content.parts if part.text)
+    try:
+        async for event in runner.run_async(
+            user_id=USER_ID,
+            session_id=session_id,
+            new_message=content,
+        ):
+            # Final text response means the model produced user-facing answer content.
+            # Tool/error events are still useful for debug but may not contain final text.
+            debug_event = _event_to_debug(event)
+            recent_events.append(debug_event)
+            recent_events = recent_events[-MAX_DEBUG_EVENTS:]
 
-    return "No response received."
+            if event.is_final_response() and event.content and event.content.parts:
+                answer = "".join(part.text for part in event.content.parts if part.text)
+                if answer.strip():
+                    return {
+                        "ok": True,
+                        "response": answer,
+                        "debug": {"recent_events": recent_events},
+                    }
+    except Exception as exc:  # Learning POC: keep full exception details visible.
+        logger.exception("Currency agent run failed: %s", exc)
+        return {
+            "ok": False,
+            "error_summary": f"{type(exc).__name__}: {exc}",
+            "debug": {
+                "traceback": traceback.format_exc(),
+                "recent_events": recent_events,
+            },
+        }
+
+    return {
+        "ok": False,
+        "error_summary": "No final text response received from ADK runner.",
+        "debug": {
+            "hint": (
+                "Runner produced no final user-facing text event. "
+                "Inspect recent events to determine whether only tool/error/internal events occurred."
+            ),
+            "recent_events": recent_events,
+        },
+    }
 
 
 @app.get("/health")
@@ -63,14 +120,31 @@ async def convert(
         f"Convert {amount} {source} to {target}. "
         "Use the get_exchange_rate tool and include the converted amount."
     )
-    answer = await ask_currency_agent(prompt)
+    result = await ask_currency_agent(prompt)
 
-    return {
-        "ok": True,
+    response: dict[str, Any] = {
         "request": {
             "from": source,
             "to": target,
             "amount": amount,
-        },
-        "agent_response": answer,
+            "prompt": prompt,
+        }
     }
+    if result["ok"]:
+        response.update(
+            {
+                "ok": True,
+                "agent_response": result["response"],
+            }
+        )
+        return response
+
+    response.update(
+        {
+            "ok": False,
+            "error_summary": result.get("error_summary", "Unknown agent failure."),
+        }
+    )
+    if "debug" in result:
+        response["debug"] = result["debug"]
+    return response
